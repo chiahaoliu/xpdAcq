@@ -16,7 +16,7 @@ Start a beamtime
 
 .. code-block:: python
 
-  bt = _end_beamtime()
+   _end_beamtime()
 
 3. run the start-beamtime sequence
 
@@ -26,14 +26,14 @@ Start a beamtime
                        experimenters = ['Emma', 'Watson', 'Tim', 'Liu'],
                        wavelength=0.184649)
 
-4. link bt to prun
+4. link bt to xrun
 
 .. code-block:: python
 
-  prun.beamtime = bt
+  xrun.beamtime = bt
 
-5. Copy the Excel spreadsheet provided by the experimenters with their samples in it to the ``xpdUser/import`` directory. Check that it has the name ``<saf_number>_samples.xlsx``
-where the <saf_number> must match that of the current beamtime.  If the user didn't supply such a thing, then copy the file ``300000_samples.xls`` from the ``xpdConfig`` directory
+5. Copy the Excel spreadsheet provided by the experimenters with their samples in it to the ``xpdUser/import`` directory. Check that it has the name ``<saf_number>_sample.xls``
+where the <saf_number> must match that of the current beamtime.  If the user didn't supply such a thing, then copy the file ``300000_sample.xls`` from the ``xpdConfig`` directory
 (which is at the same level of the directory tree as the ``xpdUser`` directory) to ``xpdUser/import`` and edit the filename so that it has the ``saf_number`` of the current beamtime.
 
 6. load the info in the spreadsheet by typing:
