@@ -138,11 +138,6 @@ def load_yaml(f, known_uids=None):
         obj = Beamtime.from_yaml(f)
         known_uids[obj['bt_uid']] = obj
         return obj
-    # Experiment is deprecated
-    # elif isinstance(data, list) and 'ex_uid' in data[0]:
-    #    beamtime = known_uids.get(data[1]['bt_uid'])
-    #    obj = Experiment.from_yaml(f, beamtime=beamtime)
-    #    known_uids[obj['ex_uid']] = obj
     elif isinstance(data, list) and 'sa_uid' in data[0]:
         beamtime = known_uids.get(data[1]['bt_uid'])
         obj = Sample.from_yaml(f, beamtime=beamtime)
