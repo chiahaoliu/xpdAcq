@@ -246,7 +246,7 @@ def _clean_info(obj):
 
 class MDOrderedDict(OrderedDict):
     def get_md(self, ind):
-        """ special method to get metadata of a objects inside a dict """
+        """ special method to get metadata of a object based on index """
         obj_list = list(self.values())
         md_dict = dict(obj_list[ind])
         return md_dict
@@ -303,8 +303,6 @@ class Beamtime(ValidatedDictLike, YamlDict):
         self._referenced_by = []
         # used by YamlDict when reload
         self.setdefault('bt_uid', new_short_uid())
-        self.setdefault('_sample_order', {})
-        self.setdefault('_scanplan_order', {})
 
     @property
     def wavelength(self):
@@ -339,6 +337,17 @@ class Beamtime(ValidatedDictLike, YamlDict):
         self.scanplans.update({scanplan_name: scanplan})
         # yaml sync list
         self._referenced_by.append(scanplan)
+        # save order for reload
+        order_ind =list(self.scanplans.keys()).index(scanplan_name)
+        with open(os.path.join(glbl.config_base,
+                               '.scanplan_order.yml'),'w+') as f:
+            scanplan_order = yaml.load(f)
+            if scanplan_order is None:
+                scanplan_order = {}
+            scanplan_order.update({order_ind: scanplan_name})
+            print("current scanplan_order dict is {}"
+                  .format(scanplan_order))
+            yaml.dump(scanplan_order, f)
 
     def register_sample(self, sample):
         # Notify this Beamtime about an Sample that should be re-synced
@@ -347,6 +356,17 @@ class Beamtime(ValidatedDictLike, YamlDict):
         self.samples.update({sample_name: sample})
         # yaml sync list
         self._referenced_by.append(sample)
+        # save order for reload
+        order_ind =list(self.samples.keys()).index(sample_name)
+        with open(os.path.join(glbl.config_base,
+                               '.sample_order.yml'), 'w+') as f:
+            sample_order = yaml.load(f)
+            if sample_order is None:
+                sample_order = {}
+            sample_order.update({order_ind: sample_name})
+            print("current sample_order dict is{}"
+                  .format(sample_order))
+            yaml.dump(sample_order, f)
 
     @classmethod
     def from_yaml(cls, f):
