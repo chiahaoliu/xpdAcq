@@ -51,14 +51,18 @@ def _update_dark_dict_list(name, doc):
     acq_time = glbl.area_det.cam.acquire_time.get()
     num_frame = glbl.area_det.images_per_set.get()
     light_cnt_time = acq_time * num_frame
-
     dark_dict = {}
     dark_dict['acq_time'] = acq_time
     dark_dict['exposure'] = light_cnt_time
     dark_dict['timestamp'] = doc['time']
     dark_dict['uid'] = doc['run_start']
-    dark_dict_list.append(dark_dict)
-    glbl._dark_dict_list = dark_dict_list  # update glbl._dark_dict_list
+    # register only if dark header is successfully run
+    if doc['exit_status'] == 'success':
+        dark_dict_list.append(dark_dict)
+        glbl._dark_dict_list = dark_dict_list
+    else:
+        print("INFO: dark scan is not successful.\n"
+              "gobal dark frame information will not be updated!")
 
 
 def take_dark():
@@ -85,10 +89,6 @@ def take_dark():
     c = bp.count([glbl.area_det], md=_md)
     yield from bp.subs_wrapper(c, {'stop': [_update_dark_dict_list]})
     print('opening shutter...')
-    # 60 means open at XPD, Oct.4, 2016
-    #yield from bp.abs_set(glbl.shutter, 60, wait=True)
-    #if glbl.shutter_control:
-    #    yield from bp.sleep(2)
 
 
 def periodic_dark(plan):
