@@ -120,7 +120,7 @@ def _load_glbl(glbl_obj, filepath=None):
     """
     if filepath is None:
         filepath = glbl_filepath
-    # fresh start
+    # fresh start if beamtime is started
     if not os.path.isfile(filepath):
         glbl_obj.flush()
     # reload
@@ -130,7 +130,6 @@ def _load_glbl(glbl_obj, filepath=None):
             glbl_dict = yaml.load(f)
         for key, val in glbl_dict.items():
             setattr(glbl_obj, key, val)
-
 
 def _configure_devices(glbl_obj, *, area_det=pe1c, shutter=shctl1,
                       temp_controller=cs700, db=db, **kwargs):
@@ -239,11 +238,11 @@ def _end_beamtime(base_dir=None, archive_dir=None, bto=None, usr_confirm='y'):
     # load bt info
     archive_name = _load_bt_info(bto, _required_info)
     # archive file
-    archive_full_name = _tar_user_data(archive_name)
+    archive_full_name, local_archive_dir = _tar_user_data(archive_name)
     # confirm archive
     _confirm_archive(archive_full_name)
     # flush
-    _delete_home_dir_tree()
+    _delete_home_dir_tree(local_archive_dir)
     # delete bt
     del ips.ns_table['user_global']['bt']
 
@@ -270,24 +269,38 @@ def _load_bt_info(bt_obj, required_fields):
     return archive_name
 
 
-def _tar_user_data(archive_name, root_dir=None, archive_format='tar'):
+def _tar_user_data(archive_name, root_dir=None, base_dir=None,
+                   archive_format='tar'):
     """ Create a remote tarball of all user folders under xpdUser directory
     """
     archive_full_name = os.path.join(glbl.archive_dir, archive_name)
     if root_dir is None:
         root_dir = glbl.base
-    cur_path = os.getcwd()
+    if base_dir is None:
+        base_dir = glbl.home
+    #cur_path = os.getcwd()
+    # rename xpdUser to xpdUser_archiving to avoid blocking workflow
+    local_archive_dir = base_dir + "_archive"
+    fp_head,local_archive_base = os.path.split(local_archive_dir)
+    # use safest method, os.renames copy and then delete src if no error
+    os.renames(base_dir, local_archive_dir)
+    # create a new base dir(xpdUser/)
+    os.makedirs(base_dir, exist_ok=True)
     try:
+        # move to root dir (the up-most dir)
         os.chdir(glbl.base)
+        # archiving files under xpdUser_archive
         print("INFO: Archiving your data now. That may take several"
               "minutes. please be patient :)")
         tar_return = shutil.make_archive(archive_full_name,
-                                         archive_format, root_dir=glbl.base,
-                                         base_dir='xpdUser', verbose=1,
+                                         archive_format,
+                                         root_dir=root_dir,
+                                         base_dir=local_archive_base,
                                          dry_run=False)
     finally:
-        os.chdir(cur_path)
-    return archive_full_name
+        # move to fresh xpdUser/ for next step
+        os.chdir(base_dir)
+    return archive_full_name, local_archive_dir
 
 
 def _load_bt(bt_yaml_path):
@@ -319,13 +332,13 @@ def _confirm_archive(archive_f_name):
     if conf in ('y', 'Y'):
         return
     else:
-        sys.exit(_graceful_exit("xpdUser directory delete operation cancelled."
-                                "at Users request"))
+        sys.exit(_graceful_exit("xpdUser directory delete operation "
+                                "cancelled at Users request"))
 
 
-def _delete_home_dir_tree():
+def _delete_home_dir_tree(local_archive_dir):
     os.chdir(glbl.base)  # move out from xpdUser before deletion
-    shutil.rmtree(glbl.home)
+    shutil.rmtree(local_archive_dir)
     os.makedirs(glbl.home, exist_ok=True)
     os.chdir(glbl.home)  # now move back into xpdUser
     return
