@@ -136,32 +136,35 @@ class NewBeamtimeTest(unittest.TestCase):
         saf_num = self.bt.get('bt_safN')
         bt_uid = self.bt.get('bt_uid')
         archive_name = _load_bt_info(self.bt, _required_info)
-        archive_full_name = _tar_user_data(archive_name)
+        archive_full_name, local_archive_dir\
+                = _tar_user_data(archive_name)
         test_tar_name = '_'.join([pi_name, saf_num, bt_uid,
                                   strftime('%Y-%m-%d-%H%M')])
         # is tar file name correct? 
         self.assertEqual(archive_full_name,
                          os.path.join(glbl.archive_dir, test_tar_name))
         # are contents tared correctly?
-        archive_test_dir = os.path.join(glbl.home, 'tar_test')
+        archive_test_dir = os.path.join(local_archive_dir, 'tar_test')
         os.makedirs(archive_test_dir, exist_ok=True)
         shutil.unpack_archive(archive_full_name + '.tar', archive_test_dir)
         content_list = os.listdir(archive_test_dir)
         # is tarball starting from xpdUser?
-        self.assertTrue('xpdUser' in content_list)
+        print(content_list)
+        self.assertTrue('xpdUser_archive' in content_list)
         # is every directory included
         basename_list = list(map(os.path.basename, glbl.allfolders))
         _exclude_list = ['xpdUser', 'xpdConfig', 'yml', 'samples',
                          'scanplans', 'experiments']
+        print(basename_list)
         # _exclude_list means sub directories and top directories 
         # that will not be in tar structure
         for el in _exclude_list:
             basename_list.remove(el)
         for el in basename_list:
             self.assertTrue(el in os.listdir(os.path.join(archive_test_dir,
-                                                          'xpdUser')))
+                                                          'xpdUser_archive')))
         # now test deleting directories
-        _delete_home_dir_tree()
+        _delete_home_dir_tree(local_archive_dir)
         self.assertTrue(len(os.listdir(glbl.home)) == 0)
 
     def test_import_userScript_Etc(self):
