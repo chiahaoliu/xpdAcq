@@ -240,7 +240,7 @@ def _end_beamtime(base_dir=None, archive_dir=None, bto=None, usr_confirm='y'):
     # archive file
     archive_full_name, local_archive_dir = _tar_user_data(archive_name)
     # confirm archive
-    _confirm_archive(archive_full_name)
+    _confirm_archive(archive_full_name, local_archive_dir)
     # flush
     _delete_home_dir_tree(local_archive_dir)
     # delete bt
@@ -326,8 +326,12 @@ def _any_input_method(inp_func):
     return inp_func()
 
 
-def _confirm_archive(archive_f_name):
-    print("tarball archived to {}".format(archive_f_name))
+def _confirm_archive(archive_full_name, local_archive_dir, fmt='.tar'):
+    print("INFO: tarball archived to {}".format(archive_full_name+fmt))
+    print("INFO: local archive size = {} bytes\n"
+          "remote archive size = {} bytes"
+          .format(os.path.getsize(archive_full_name+fmt),
+                  os.path.getsize(local_archive_dir)))
     conf = _any_input_method(_get_user_confirmation)
     if conf in ('y', 'Y'):
         return
