@@ -278,28 +278,36 @@ def _tar_user_data(archive_name, root_dir=None, base_dir=None,
         root_dir = glbl.base
     if base_dir is None:
         base_dir = glbl.home
-    #cur_path = os.getcwd()
-    # rename xpdUser to xpdUser_archiving to avoid blocking workflow
-    local_archive_dir = base_dir + "_archive"
-    fp_head,local_archive_base = os.path.split(local_archive_dir)
-    # use safest method, os.renames copy and then delete src if no error
-    os.renames(base_dir, local_archive_dir)
-    # create a new base dir(xpdUser/)
-    os.makedirs(base_dir, exist_ok=True)
+    # where will the program move to
+    dst_dir = os.getcwd()
     try:
+        local_archive_dir = base_dir + "_archive"
+        fp_head,local_archive_base = os.path.split(local_archive_dir)
+        # use safest method, copys src and delete only if no error
+        os.renames(base_dir, local_archive_dir)
+        # create a new base dir(xpdUser/)
+        os.makedirs(base_dir, exist_ok=True)
         # move to root dir (the up-most dir)
         os.chdir(glbl.base)
         # archiving files under xpdUser_archive
-        print("INFO: Archiving your data now. That may take several"
+        print("INFO: Archiving your data now. That may take several "
               "minutes. please be patient :)")
         tar_return = shutil.make_archive(archive_full_name,
                                          archive_format,
                                          root_dir=root_dir,
                                          base_dir=local_archive_base,
                                          dry_run=False)
+        conf = _confirm_archive(archive_full_name)
+    except:
+        # if anything went wrong, restore to original state
+        pass
+    else:
+        # if no exception during acrhive flip dst_dir
+        dst_dir = base_dir
     finally:
-        # move to fresh xpdUser/ for next step
-        os.chdir(base_dir)
+        # always move to dst_dir, the vale depends on status of
+        # archiving
+        os.chdir(dst_dir)
     return archive_full_name, local_archive_dir
 
 
@@ -316,29 +324,18 @@ def _load_bt(bt_yaml_path):
     return bto
 
 
-def _get_user_confirmation():
-    conf = input("Please confirm data are backed up. Are you ready to continue"
-                 "with xpdUser directory contents deletion (y,[n])?: ")
-    return conf
-
-
-def _any_input_method(inp_func):
-    return inp_func()
-
-
 def _confirm_archive(archive_full_name, local_archive_dir, fmt='.tar'):
     print("INFO: tarball archived to {}".format(archive_full_name+fmt))
     print("INFO: local archive size = {} bytes\n"
           "remote archive size = {} bytes"
           .format(os.path.getsize(archive_full_name+fmt),
                   os.path.getsize(local_archive_dir)))
-    conf = _any_input_method(_get_user_confirmation)
-    if conf in ('y', 'Y'):
-        return
-    else:
-        sys.exit(_graceful_exit("xpdUser directory delete operation "
-                                "cancelled at Users request"))
-
+    conf = input("Please confirm data are backed up. "
+                 "Are you ready to continue with xpdUser directory "
+                 "contents deletion (y,[n])?: ")
+    if conf not in ('y', 'Y', 'yes', 'Yes'):
+        raise InterruptedError("xpdUser directory delete operation "
+                                "cancelled at Users request")
 
 def _delete_home_dir_tree(local_archive_dir):
     os.chdir(glbl.base)  # move out from xpdUser before deletion
