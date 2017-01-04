@@ -311,6 +311,16 @@ def _tar_user_data(archive_name, root_dir=None, base_dir=None,
     return archive_full_name, local_archive_dir
 
 
+def _resotre_end_beamtime(base_dir, local_archive_dir):
+    """function to restore end_beamtime process if any error happens"""
+    # check if base_dir is fresh
+    fn_list = os.list_dir(base_dir)
+    if not fn_list:
+        os.renames(local_archive_dir, base_dir)
+    else:
+        raise FileExistsError("{} directory is not empty. new beamtime "
+                              "might have been started. Please ")
+
 def _load_bt(bt_yaml_path):
     btoname = os.path.join(glbl.yaml_dir, 'bt_bt.yml')
     if not os.path.isfile(btoname):
