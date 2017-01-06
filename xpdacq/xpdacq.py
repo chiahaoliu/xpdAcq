@@ -24,7 +24,8 @@ from bluesky import RunEngine
 from bluesky.utils import normalize_subs_input
 from bluesky.suspenders import SuspendFloor
 
-from xpdacq.glbl import glbl, xpd_device, glbl_dict
+from xpdacq.glbl import glbl
+from xpdacq.xpdacq_conf import xpd_device
 from xpdacq.yamldict import YamlDict, YamlChainMap
 from xpdacq.beamtime import *
 
