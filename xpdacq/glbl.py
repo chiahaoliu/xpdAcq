@@ -18,6 +18,7 @@ GROUP = 'XPD'
 IMAGE_FIELD = 'pe1_image'
 CALIB_CONFIG_NAME = 'pyFAI_calib.yml'
 MASK_MD_NAME = 'xpdacq_mask.npy'
+GLBL_YAML_NAME = 'glbl.yml'
 
 # change this to be handled by an environment variable later
 hostname = socket.gethostname()
@@ -55,6 +56,7 @@ ANALYSIS_DIR = os.path.join(HOME_DIR, 'userAnalysis')
 USERSCRIPT_DIR = os.path.join(HOME_DIR, 'userScripts')
 TIFF_BASE = os.path.join(HOME_DIR, 'tiff_base')
 USER_BACKUP_DIR = os.path.join(ARCHIVE_BASE_DIR, USER_BACKUP_DIR_NAME)
+GLBL_YAML_PATH = os.path.join(YAML_DIR, GLBL_YAML_NAME)
 
 ALL_FOLDERS = [
     HOME_DIR,
@@ -74,44 +76,43 @@ _EXCLUDE_DIR = [HOME_DIR, BLCONFIG_DIR, YAML_DIR]
 _EXPORT_TAR_DIR = [CONFIG_BASE, USERSCRIPT_DIR]
 
 
-glbl_dict = {
-             '_is_simulation': simulation,
-             # beamline info
-             'owner':OWNER,
-             'beamline_id': BEAMLINE_ID,
-             'group': GROUP,
-             'beamline_host_name': BEAMLINE_HOST_NAME,
-             # directory names
-             'base': BASE_DIR,
-             'home': HOME_DIR,
-             '_export_tar_dir': _EXPORT_TAR_DIR,
-             'xpdconfig': BLCONFIG_DIR,
-             'import_dir': IMPORT_DIR,
-             'config_base': CONFIG_BASE,
-             'tiff_base': TIFF_BASE,
-             'usrScript_dir': USERSCRIPT_DIR,
-             'usrAnalysis_dir': ANALYSIS_DIR,
-             'yaml_dir': YAML_DIR,
-             'bt_dir': BT_DIR,
-             'sample_dir': SAMPLE_DIR,
-             'scanplan_dir': SCANPLAN_DIR,
-             'allfolders': ALL_FOLDERS,
-             'archive_dir': USER_BACKUP_DIR,
-             # options for functionalities
-             'auto_dark': True,
-             'dk_window': DARK_WINDOW,
-             '_dark_dict_list': [], # initiate a new one every time
-             'shutter_control': True,
-             'auto_load_calib': True,
-             'calib_config_name': CALIB_CONFIG_NAME,
-             'mask_dict': {'edge': 30, 'lower_thresh': 0.0,
-                           'upper_thresh': None, 'bs_width': 13,
-                           'tri_offset': 13, 'v_asym': 0,
-                           'alpha': 2.5, 'tmsk': None},
-             # instrument config
-             'det_image_field': IMAGE_FIELD,
-             'mask_md_name': MASK_MD_NAME
-             }
+glbl_dict = dict(is_simulation=simulation,
+                 # beamline info
+                 owner=OWNER,
+                 beamline_id=BEAMLINE_ID,
+                 group=GROUP,
+                 beamline_host_name=BEAMLINE_HOST_NAME,
+                 # directory names
+                 base=BASE_DIR,
+                 home=HOME_DIR,
+                 _export_tar_dir=_EXPORT_TAR_DIR,
+                 xpdconfig=BLCONFIG_DIR,
+                 import_dir=IMPORT_DIR,
+                 config_base=CONFIG_BASE,
+                 tiff_base=TIFF_BASE,
+                 usrScript_dir=USERSCRIPT_DIR,
+                 usrAnalysis_dir=ANALYSIS_DIR,
+                 yaml_dir=YAML_DIR,
+                 bt_dir=BT_DIR,
+                 sample_dir=SAMPLE_DIR,
+                 scanplan_dir=SCANPLAN_DIR,
+                 allfolders=ALL_FOLDERS,
+                 archive_dir=USER_BACKUP_DIR,
+                 # options for functionalities
+                 auto_dark=True,
+                 dk_window=DARK_WINDOW,
+                 _dark_dict_list=[],
+                 shutter_control=True,
+                 auto_load_calib=True,
+                 calib_config_name=CALIB_CONFIG_NAME,
+                 mask_dict={'edge': 30, 'lower_thresh': 0.0,
+                            'upper_thresh': None, 'bs_width': 13,
+                            'tri_offset': 13, 'v_asym': 0,
+                            'alpha': 2.5, 'tmsk': None},
+                 # instrument config
+                 det_image_field=IMAGE_FIELD,
+                 mask_name=MASK_NAME
+                 )
 
 
 # dict to store all necessary objects
@@ -168,8 +169,10 @@ class GlblYamlDict(YamlDict):
     _VALID_ATTRS = ['_name', '_filepath', 'filepath', '_referenced_by']
 
     # keys for fileds allowed to change
-    _ALLOWED_KEYS = ['det_image_field', 'auto_dark',
-                     'dk_window', 'shutter_control']
+    _MUTABLE_FILEDS = ['auto_dark', 'dk_window', '_dark_dict_list',
+                       'shutter_control', 'auto_load_calib',
+                       'calib_config_name', 'mask_dict',
+                       'det_image_field', 'mask_name']
 
     def __init__(self, name, **kwargs):
         super().__init__(name=name,**kwargs)
@@ -180,17 +183,15 @@ class GlblYamlDict(YamlDict):
         return os.path.join(os.getcwd(), 'glbl_test.yml')
 
     def __setitem__(self, key, val):
-        if key not in self._ALLOWED_KEYS:
-            raise xpdAcqException("{} is not an allowed key\n"
-                                  "Allowed keys are:\n{}"
-                                  .format(key,
-                                          '\n'.join(self._ALLOWED_KEYS)))
+        if key not in self._MUTABLE_FIELDS:
+            raise xpdAcqException("key='{}' is not allowed to change!"
+                                  .format(key))
         else:
             super().__setitem__(key, val)
 
     def __setattr__(self, key, val):
         if key not in self._VALID_ATTRS:
-            if key in (self._ALLOWED_KEYS):
+            if key in (self._MUTABLE_FIELDS):
                 # back-support
                 raise DeprecationWarning("{} has been changed, please do "
                                          "this command instead\n"
@@ -199,7 +200,7 @@ class GlblYamlDict(YamlDict):
                                                  self._name,
                                                  key, val))
             else:
-                raise AttributeError("{} doesn't support attribute"
+                raise AttributeError("{} doesn't support setting attribute"
                                      .format(self._name))
         else:
             super().__setattr__(key, val)
@@ -217,5 +218,3 @@ class GlblYamlDict(YamlDict):
         return cls(**d)
 
 glbl = GlblYamlDict('glbl', **glbl_dict)
-# Possible config:
-# full_xpdAcq_config = ChainMap(glbl, xpd_device)
