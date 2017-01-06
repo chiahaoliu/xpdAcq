@@ -116,6 +116,7 @@ glbl_dict = dict(is_simulation=simulation,
                  scanplan_dir=SCANPLAN_DIR,
                  allfolders=ALL_FOLDERS,
                  archive_dir=USER_BACKUP_DIR,
+                 glbl_yaml_path=GLBL_YAML_PATH,
                  # options for functionalities
                  auto_dark=True,
                  dk_window=DARK_WINDOW,
