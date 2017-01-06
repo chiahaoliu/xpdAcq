@@ -135,10 +135,9 @@ glbl_dict = dict(is_simulation=simulation,
                  )
 
 
-# dict to store all necessary objects
+# special function and dict to store all necessary objects
 xpd_device = {}
-
-def setup_xpdAcq(*, area_det, shutter, temp_controller, db, **kwargs):
+def setup_xpdacq(*, area_det, shutter, temp_controller, db, **kwargs):
     """ function to set up required device/objects for xpdacq """
     # specifically assign minimum requirements
     xpd_device['area_det'] = area_det
