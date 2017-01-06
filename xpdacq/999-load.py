@@ -18,11 +18,10 @@ from xpdacq.glbl import glbl, setup_xpdacq
 from xpdacq.beamtime import *
 from xpdacq.utils import import_sample_info
 from xpdacq.beamtimeSetup import (start_xpdacq, _start_beamtime,
-                                  _end_beamtime, _load_glbl,
-                                  _configure_devices)
+                                  _end_beamtime)
 
 # configure experiment device being used in current version
-if glbl.is_simulation:
+if glbl['is_simulation']:
     from xpdacq.simulation import pe1c, db, cs700, shctl1
 setup_xpdacq(area_det=pe1c, shutter=shctl1,
              temp_controller=cs700, db=db)
