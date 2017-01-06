@@ -74,7 +74,7 @@ USERSCRIPT_DIR = os.path.join(HOME_DIR, 'userScripts')
 TIFF_BASE = os.path.join(HOME_DIR, 'tiff_base')
 USER_BACKUP_DIR = os.path.join(ARCHIVE_BASE_DIR, USER_BACKUP_DIR_NAME)
 GLBL_YAML_PATH = os.path.join(YAML_DIR, GLBL_YAML_NAME)
-
+MASK_PATH = os.path.join(CONFIG_BASE, MASK_NAME)
 
 ALL_FOLDERS = [
     HOME_DIR,
@@ -117,7 +117,9 @@ glbl_dict = dict(is_simulation=simulation,
                  allfolders=ALL_FOLDERS,
                  archive_dir=USER_BACKUP_DIR,
                  glbl_yaml_path=GLBL_YAML_PATH,
+                 mask_path=MASK_PATH,
                  # options for functionalities
+                 frame_acq_time=FRAME_ACQUIRE_TIME,
                  auto_dark=True,
                  dk_window=DARK_WINDOW,
                  _dark_dict_list=[],
@@ -129,8 +131,7 @@ glbl_dict = dict(is_simulation=simulation,
                             'tri_offset': 13, 'v_asym': 0,
                             'alpha': 2.5, 'tmsk': None},
                  # instrument config
-                 det_image_field=IMAGE_FIELD,
-                 mask_name=MASK_NAME
+                 det_image_field=IMAGE_FIELD
                  )
 
 
@@ -187,11 +188,11 @@ class GlblYamlDict(YamlDict):
     # required attributes for yaml
     _VALID_ATTRS = ['_name', '_filepath', 'filepath', '_referenced_by']
 
-    # keys for fileds allowed to change
-    _MUTABLE_FILEDS = ['auto_dark', 'dk_window', '_dark_dict_list',
-                       'shutter_control', 'auto_load_calib',
-                       'calib_config_name', 'mask_dict',
-                       'det_image_field', 'mask_name']
+    # keys for fields allowed to change
+    _MUTABLE_FIELDS = ['frame_acq_time', 'auto_dark', 'dk_window',
+                       '_dark_dict_list', 'shutter_control',
+                       'auto_load_calib', 'calib_config_name',
+                       'mask_dict', 'det_image_field']
 
     def __init__(self, name, **kwargs):
         super().__init__(name=name,**kwargs)
@@ -199,13 +200,16 @@ class GlblYamlDict(YamlDict):
         self._name = name
 
     def default_yaml_path(self):
-        return os.path.join(os.getcwd(), 'glbl_test.yml')
+        return GLBL_YAML_PATH
 
     def __setitem__(self, key, val):
         if key not in self._MUTABLE_FIELDS:
             raise xpdAcqException("key='{}' is not allowed to change!"
                                   .format(key))
         else:
+            # annoying logic specifically for area_det
+            if key == 'frame_acq_time':
+                configure_frame_acq_time(val)
             super().__setitem__(key, val)
 
     def __setattr__(self, key, val):
