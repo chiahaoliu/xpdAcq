@@ -1,8 +1,25 @@
+#!/usr/bin/env python
+##############################################################################
+#
+# xpdacq            by Billinge Group
+#                   Simon J. L. Billinge sb2896@columbia.edu
+#                   (c) 2016 trustees of Columbia University in the City of
+#                        New York.
+#                   All rights reserved
+#
+# File coded by:    Timothy Liu, Simon Billinge
+#
+# See AUTHORS.txt for a list of people who contributed.
+# See LICENSE.txt for license information.
+#
+##############################################################################
 import os
 import socket
 import time
 from time import strftime, sleep
 from xpdacq.yamldict import YamlDict
+
+from xpdacq.yamlclass import YamlClass
 
 # better to get this from a config file in the fullness of time
 HOME_DIR_NAME = 'xpdUser'
@@ -17,7 +34,7 @@ BEAMLINE_ID = 'xpd'
 GROUP = 'XPD'
 IMAGE_FIELD = 'pe1_image'
 CALIB_CONFIG_NAME = 'pyFAI_calib.yml'
-MASK_MD_NAME = 'xpdacq_mask.npy'
+MASK_NAME = 'xpdacq_mask.npy'
 GLBL_YAML_NAME = 'glbl.yml'
 
 # change this to be handled by an environment variable later
@@ -57,6 +74,7 @@ USERSCRIPT_DIR = os.path.join(HOME_DIR, 'userScripts')
 TIFF_BASE = os.path.join(HOME_DIR, 'tiff_base')
 USER_BACKUP_DIR = os.path.join(ARCHIVE_BASE_DIR, USER_BACKUP_DIR_NAME)
 GLBL_YAML_PATH = os.path.join(YAML_DIR, GLBL_YAML_NAME)
+
 
 ALL_FOLDERS = [
     HOME_DIR,

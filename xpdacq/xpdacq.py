@@ -1,8 +1,22 @@
+#!/usr/bin/env python
+##############################################################################
+#
+# xpdacq            by Billinge Group
+#                   Simon J. L. Billinge sb2896@columbia.edu
+#                   (c) 2016 trustees of Columbia University in the City of
+#                        New York.
+#                   All rights reserved
+#
+# File coded by:    Timothy Liu, Dan Allan, Thomas A. Caswell
+#
+# See AUTHORS.txt for a list of people who contributed.
+# See LICENSE.txt for license information.
+#
+##############################################################################
 import os
 import uuid
 import time
 import yaml
-import datetime
 from itertools import count
 
 import bluesky.plans as bp
@@ -46,7 +60,7 @@ def _update_dark_dict_list(name, doc):
     This function should be subscribed to 'stop' documents from dark
     frame runs.
     """
-    # always grab from glbl state 
+    # always grab from glbl state
     dark_dict_list = list(glbl._dark_dict_list)
     # obtain light count time that is already set to glbl.pe1c
     acq_time = glbl.area_det.cam.acquire_time.get()
@@ -65,10 +79,8 @@ def _update_dark_dict_list(name, doc):
 def take_dark():
     """a plan for taking a single dark frame"""
     print('INFO: closing shutter...')
-    # 60 means open at XPD, Oct.4, 2016
+    # 0, means close, 60 means open at XPD, Oct.4, 2016
     yield from bp.abs_set(glbl.shutter, 0, wait=True)
-    #if glbl.shutter_control:
-    #    yield from bp.sleep(2)
     print('INFO: taking dark frame....')
     # upto this stage, glbl.pe1c has been configured to so exposure time is
     # correct
@@ -86,10 +98,6 @@ def take_dark():
     c = bp.count([glbl.area_det], md=_md)
     yield from bp.subs_wrapper(c, {'stop': [_update_dark_dict_list]})
     print('opening shutter...')
-    # 60 means open at XPD, Oct.4, 2016
-    #yield from bp.abs_set(glbl.shutter, 60, wait=True)
-    #if glbl.shutter_control:
-    #    yield from bp.sleep(2)
 
 
 def periodic_dark(plan):
@@ -117,7 +125,7 @@ def periodic_dark(plan):
             need_dark = False
             # Annoying detail: the detector was probably already staged.
             # Unstage it (if it wasn't staged, nothing will happen) and
-            # then take_dark() and then re-stage it. 
+            # then take_dark() and then re-stage it.
             return bp.pchain(bp.unstage(glbl.area_det),
                              take_dark(),
                              bp.stage(glbl.area_det),
@@ -152,21 +160,23 @@ def _validate_dark(expire_time=None):
     light_cnt_time = acq_time * num_frame
     # find fresh and qualified dark
     now = time.time()
-    qualified_dark_uid = [el['uid'] for el in dark_dict_list if
-                          abs(el['exposure'] - light_cnt_time) <= acq_time
-                          and abs(el['timestamp'] - now)
-                          <= (expire_time * 60 - acq_time)
-                          and (el['acq_time'] == acq_time)
-                          ]
-    if qualified_dark_uid:
-        return qualified_dark_uid[-1]
+    qualified_dark_list = []
+    for el in dark_dict_list:
+        expo_diff = abs(el['exposure'] - light_cnt_time)
+        time_diff = abs(el['timestamp'] - now)
+        if (expo_diff < acq_time) and\
+           (time_diff < expire_time*60) and\
+           (el['acq_time'] ==  acq_time):
+            qualified_dark_list.append((el.get('uid'), expo_diff,
+                                        time_diff))
+    if qualified_dark_list:
+        # sort wrt expo_diff and time_diff for best candidate
+        best_dark = sorted(qualified_dark_list,
+                           key=lambda x: x[1] and x[2])[0]
+        best_dark_uid = best_dark[0]
+        return best_dark_uid
     else:
         return None
-
-
-def _timestamp_to_time(timestamp):
-    """ short help function """
-    return datetime.datetime.fromtimestamp(timestamp).strftime('%Y%m%d-%H%M')
 
 
 def _auto_load_calibration_file():
@@ -239,9 +249,9 @@ def _inject_mask(msg):
 def open_collection(collection_name):
     """ function to open a collection of your following scans
 
-    collection is a list of uid of executed scans. 
-    Only one collection will be alive in collection environment. 
-    This set of uids will be saved as a yaml file and desired operations 
+    collection is a list of uid of executed scans.
+    Only one collection will be alive in collection environment.
+    This set of uids will be saved as a yaml file and desired operations
     can be applied later.
 
     Parameters
@@ -334,7 +344,7 @@ class CustomizedRunEngine(RunEngine):
         print("INFO: beamtime object has been linked\n")
         # from xpdacq.calib import run_calibration
         if not glbl._is_simulation:
-            self.subscribe('all', glbl.db.mds.insert)
+            pass
             # let user deal with suspender
             #beamdump_sus = SuspendFloor(glbl.ring_current, 50,
             #                            resume_thresh=glbl.ring_current.get() * 0.9,

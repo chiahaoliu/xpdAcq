@@ -1,3 +1,18 @@
+#!/usr/bin/env python
+##############################################################################
+#
+# xpdacq            by Billinge Group
+#                   Simon J. L. Billinge sb2896@columbia.edu
+#                   (c) 2016 trustees of Columbia University in the City of
+#                        New York.
+#                   All rights reserved
+#
+# File coded by:    Timothy Liu, Christopher J. Wright
+#
+# See AUTHORS.txt for a list of people who contributed.
+# See LICENSE.txt for license information.
+#
+##############################################################################
 import os
 import sys
 import uuid
@@ -5,40 +20,51 @@ import time
 import tempfile
 import numpy as np
 from time import strftime
-from tifffile import imread
 from unittest.mock import MagicMock
 
 import bluesky.examples as be
 
 
+# faking plug in:
+class PutGet:
+    """basic class to have set/put method"""
+
+    def __init__(self, numeric_val=1):
+        self._val = numeric_val
+
+    def put(self, val):
+        """set value"""
+        self._val = val
+        return self._val
+
+    def get(self):
+        """read current value"""
+        return self._val
+
+
+class SimulatedCam:
+    """class to simulate Camera class"""
+
+    def __init__(self, frame_acq_time=0.1, acquire=1):
+        # default acq_time = 0.1s and detector is turned on
+        self.acquire_time = PutGet(frame_acq_time)
+        self.acquire = PutGet(acquire)
+
+
 # define simulated PE1C
-class SimulatedPE1C(be.Reader):
-    """Subclass the bluesky plain detector examples ('Reader'); add attributes."""
+class SimulatedPE1C(be.ReaderWithFileStore):
+    """Subclass the bluesky plain detector examples ('Reader');
 
-    def __init__(self, name, read_fields):
-        self.images_per_set = MagicMock()
-        self.images_per_set.get = MagicMock(return_value=5)
-        self.number_of_sets = MagicMock()
-        self.number_of_sets.put = MagicMock(return_value=1)
-        self.number_of_sets.get = MagicMock(return_value=1)
-        self.cam = MagicMock()
-        self.cam.acquire_time = MagicMock()
-        self.cam.acquire_time.put = MagicMock(return_value=0.1)
-        self.cam.acquire_time.get = MagicMock(return_value=0.1)
+    also add realistic attributes.
+    """
+
+    def __init__(self, name, read_fields, fs):
+        self.images_per_set = PutGet()
+        self.number_of_sets = PutGet()
+        self.cam = SimulatedCam()
         self._staged = False
-
-        super().__init__(name, read_fields)
-
+        super().__init__(name, read_fields, fs=fs)
         self.ready = True  # work around a hack in Reader
-
-    def stage(self):
-        if self._staged:
-            raise RuntimeError("Device is already staged.")
-        self._staged = True
-        return [self]
-
-    def unstage(self):
-        self._staged = False
 
 
 def build_pymongo_backed_broker():
@@ -70,7 +96,7 @@ def build_pymongo_backed_broker():
     fs.register_handler('npy', NpyHandler)
 
     db = Broker(mds, fs)
-    insert_imgs(db.mds, db.fs, 1, (2048,2048))
+    #insert_imgs(db.mds, db.fs, 1, (20, 20))
 
     return db
 
@@ -92,7 +118,7 @@ def insert_imgs(mds, fs, n, shape, save_dir=tempfile.mkdtemp()):
 
     """
     # Insert the dark images
-    dark_img = np.zeros(shape)
+    dark_img = np.ones(shape)
     dark_uid = str(uuid.uuid4())
     run_start = mds.insert_run_start(uid=str(uuid.uuid4()), time=time.time(),
                                      name='test-dark', dark_uid=dark_uid,
@@ -132,11 +158,7 @@ def insert_imgs(mds, fs, n, shape, save_dir=tempfile.mkdtemp()):
                     data_keys=data_keys,
                     time=time.time(), uid=str(uuid.uuid4()))
     descriptor = mds.insert_descriptor(**data_hdr)
-    # FIXME: dirty load
-    exp_img_path = os.path.join(os.path.dirname(__file__),
-                                'examples', 'sub_Ni_60.tif')
-    exp_img = imread(exp_img_path)
-    print(exp_img)
+    exp_img = np.ones(shape)
     for i, light_img in enumerate([exp_img]):
         fs_uid = str(uuid.uuid4())
         fn = os.path.join(save_dir, fs_uid + '.npy')
@@ -156,10 +178,9 @@ def insert_imgs(mds, fs, n, shape, save_dir=tempfile.mkdtemp()):
                         time=time.time())
     return save_dir
 
-
-# create objects
-# FIXME: in the future, these creations should go to xpdSim
-pe1c = SimulatedPE1C('pe1c', {'pe1_image': lambda: 5})
-shutter = be.Mover('motor', {'motor': lambda x: x}, {'x': 0})
+# instantiate simulation objects
 db = build_pymongo_backed_broker()
-insert_imgs(db.mds, db.fs, 1, (2048,2048), save_dir=tempfile.mkdtemp())
+db.fs.register_handler('RWFS_NPY', be.ReaderWithFSHandler)
+pe1c = SimulatedPE1C('pe1c', {'pe1_image': lambda: np.ones((5,5))}, fs=db.fs)
+shctl1 = be.Mover('shctl1', {'rad': lambda x: x}, {'x':0})
+cs700 = be.Mover('cs700', {'temperature': lambda x: x}, {'x':300})

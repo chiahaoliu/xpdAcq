@@ -4,20 +4,15 @@ import shutil
 import time
 import yaml
 import uuid
-from unittest.mock import MagicMock
-from configparser import ConfigParser
-from time import strftime
 
 from xpdacq.glbl import glbl
 from xpdacq.beamtime import *
 from xpdacq.utils import import_sample_info
-from xpdacq.beamtimeSetup import (_start_beamtime, _end_beamtime)
+from xpdacq.beamtimeSetup import (_start_beamtime, _end_beamtime,
+                                  _configure_devices)
 from xpdacq.xpdacq import (_validate_dark, CustomizedRunEngine,
                            _auto_load_calibration_file,
                            open_collection)
-from xpdacq.simulation import SimulatedPE1C
-
-import bluesky.examples as be
 
 class xrunTest(unittest.TestCase):
     def setUp(self):
@@ -31,6 +26,8 @@ class xrunTest(unittest.TestCase):
                               ('Terban ', ' Max', 2)]
         # make xpdUser dir. That is required for simulation
         os.makedirs(self.home_dir, exist_ok=True)
+        # set simulation objects
+        _configure_devices(glbl)
         self.bt = _start_beamtime(self.PI_name, self.saf_num,
                                   self.experimenters,
                                   wavelength=self.wavelength)
@@ -38,16 +35,8 @@ class xrunTest(unittest.TestCase):
         src = os.path.join(os.path.dirname(__file__), xlf)
         shutil.copyfile(src, os.path.join(glbl.import_dir, xlf))
         import_sample_info(self.saf_num, self.bt)
-        self.sp = ScanPlan(self.bt, ct, 5)
-        glbl.shutter_control = True
         self.xrun = CustomizedRunEngine(self.bt)
         open_collection('unittest')
-        # simulation objects
-        glbl.area_det = SimulatedPE1C('pe1c', {'pe1_image': lambda: 5})
-        glbl.temp_controller = be.motor
-        glbl.shutter = be.Mover('motor', {'motor': lambda x: x}, {'x': 0})
-
-
 
     def tearDown(self):
         os.chdir(self.base_dir)
@@ -61,94 +50,94 @@ class xrunTest(unittest.TestCase):
     def test_validate_dark(self):
         """ test login in this function """
         # no dark_dict_list
-        if glbl._dark_dict_list:
-            glbl._dark_dict_list = []
-        self.assertFalse(glbl._dark_dict_list)
+        glbl._dark_dict_list = []
         rv = _validate_dark()
-        self.assertEqual(rv, None)
+        assert rv == None
         # initiate dark_dict_list
-        # light cnt time is always 0.5 in mock detector, for now..
         dark_dict_list = []
         now = time.time()
-
+        # configure area detector
+        glbl.area_det.cam.acquire_time.put(0.1)
+        glbl.area_det.images_per_set.put(5)
+        acq_time = glbl.area_det.cam.acquire_time.get()
+        num_frame = glbl.area_det.images_per_set.get()
+        light_cnt_time = acq_time*num_frame
         # case1: adjust exposure time
         for i in range(5):
             dark_dict_list.append({'uid': str(uuid.uuid4()),
                                    'exposure': (i + 1) * 0.1,
                                    'timestamp': now,
-                                   'acq_time': 0.1})
+                                   'acq_time': acq_time})
         glbl._dark_dict_list = dark_dict_list
-        correct_uid = [el['uid'] for el in dark_dict_list if
-                       el['exposure'] == 0.5]
-        self.assertEqual(len(correct_uid), 1)
-        rv = _validate_dark()
-        self.assertEqual(rv, correct_uid[-1])
+        rv = _validate_dark(glbl.dk_window)
+        correct_set = [el for el in dark_dict_list if
+                       abs(el['exposure']-light_cnt_time)<10**(-4)]
+        print(dark_dict_list)
+        print("correct_set = {}".format(correct_set))
+        assert rv == correct_set[0].get('uid')
 
         # case2: adjust expire time
         dark_dict_list = []
         for i in range(5):
             dark_dict_list.append({'uid': str(uuid.uuid4()),
-                                   'exposure': 0.5,
+                                   'exposure': light_cnt_time,
                                    'timestamp': now - (i + 1) * 60,
-                                   'acq_time': 0.1})
+                                   'acq_time': acq_time})
         glbl._dark_dict_list = dark_dict_list
-        correct_uid = [el['uid'] for el in dark_dict_list
-                       if el['timestamp'] - time.time() <=
-                       (glbl.dk_window * 60 - 0.1)]
-        # large window
+        # large window -> still find the best (freshest) one
         rv = _validate_dark()
-        self.assertEqual(rv, correct_uid[-1])
-        # small window
+        assert rv == dark_dict_list[0].get('uid')
+        # small window -> find None
         rv = _validate_dark(0.1)
-        self.assertEqual(rv, None)
-        # medium window
+        assert rv == None
+        # medium window -> find the first one as it's within 1 min window
         rv = _validate_dark(1.5)
-        correct_uid = dark_dict_list[0]['uid']
-        self.assertEqual(rv, correct_uid)
+        assert rv == dark_dict_list[0].get('uid')
 
         # case3: adjust acqtime
         dark_dict_list = []
         for i in range(5):
             dark_dict_list.append({'uid': str(uuid.uuid4()),
-                                   'exposure': 0.5,
+                                   'exposure': light_cnt_time,
                                    'timestamp': now,
-                                   'acq_time': 0.1 * i})
+                                   'acq_time': acq_time * (i+1)})
         glbl._dark_dict_list = dark_dict_list
-        correct_uid = [el['uid'] for el in dark_dict_list
-                       if el['acq_time'] == glbl.frame_acq_time]
+        # leave for future debug
+        #print("dark_dict_list = {}"
+        #      .format([(el.get('exposure'),
+        #                el.get('timestamp'),
+        #                el.get('uid'),
+        #                el.get('acq_time'))for el in glbl._dark_dict_list]))
         rv = _validate_dark()
-        self.assertEqual(len(correct_uid), 1)
-        self.assertEqual(rv, correct_uid[-1])
+        assert rv == dark_dict_list[0].get('uid')
 
         # case4: with real xrun
-        glbl._dark_dict_list = []  # re-init
-        xrun_uid = self.xrun(0, 0)
+        if glbl._dark_dict_list:
+            glbl._dark_dict_list = []
+        xrun_uid = self.xrun({}, 0)
         print(xrun_uid)
-        self.assertEqual(len(xrun_uid), 2)  # first one is auto_dark
+        assert len(xrun_uid) == 2  # first one is auto_dark
         dark_uid = _validate_dark()
-        self.assertEqual(xrun_uid[0], dark_uid)
+        assert xrun_uid[0] == dark_uid
         # test sc_dark_field_uid
         msg_list = []
-
         def msg_rv(msg):
             msg_list.append(msg)
-
         self.xrun.msg_hook = msg_rv
         self.xrun(0, 0)
-        open_run = [el.kwargs for el in msg_list if el.command == 'open_run'][
-            0]
-        self.assertEqual(dark_uid, open_run['sc_dk_field_uid'])
+        open_run = [el.kwargs for el in msg_list
+                    if el.command == 'open_run'][0]
+        assert dark_uid == open_run['sc_dk_field_uid']
         # no auto-dark
         glbl.auto_dark = False
         new_xrun_uid = self.xrun(0, 0)
-        self.assertEqual(len(new_xrun_uid), 1)  # no dark frame
-        self.assertEqual(glbl._dark_dict_list[-1]['uid'],
-                         dark_uid)  # no update
+        assert len(new_xrun_uid) == 1  # no dark frame
+        assert glbl._dark_dict_list[-1]['uid'] == dark_uid  # no update
 
     def test_auto_load_calibration(self):
         # no config file in xpdUser/config_base
         auto_calibration_md_dict = _auto_load_calibration_file()
-        self.assertIsNone(auto_calibration_md_dict)
+        assert auto_calibration_md_dict == None
         # one config file in xpdUser/config_base:
         cfg_f_name = glbl.calib_config_name
         cfg_src = os.path.join(os.path.dirname(__file__), cfg_f_name)
@@ -204,6 +193,59 @@ class xrunTest(unittest.TestCase):
         # specific info encoded in test file
         self.assertEqual(open_run['calibration_collection_uid'],
                          'uuid1234')
+
+    def test_xrun_with_xpdAcqPlans(self):
+        exp = 5
+        # test with ct
+        msg_list = []
+        def msg_rv(msg):
+            msg_list.append(msg)
+        self.xrun.msg_hook = msg_rv
+        self.xrun({}, ScanPlan(self.bt, ct, exp))
+        open_run = [el.kwargs for el in msg_list
+                    if el.command == 'open_run'].pop()
+        self.assertEqual(open_run['sp_type'], 'ct')
+        self.assertEqual(open_run['sp_requested_exposure'], exp)
+        # test with Tramp
+        Tstart, Tstop, Tstep = 300, 200, 10
+        msg_list = []
+        def msg_rv(msg):
+            msg_list.append(msg)
+        self.xrun.msg_hook = msg_rv
+        self.xrun({}, ScanPlan(self.bt, Tramp, exp, Tstart,
+                               Tstop, Tstep))
+        open_run = [el.kwargs for el in msg_list
+                    if el.command == 'open_run'].pop()
+        self.assertEqual(open_run['sp_type'], 'Tramp')
+        self.assertEqual(open_run['sp_requested_exposure'], exp)
+        self.assertEqual(open_run['sp_startingT'], Tstart)
+        self.assertEqual(open_run['sp_endingT'], Tstop)
+        self.assertEqual(open_run['sp_requested_Tstep'], Tstep)
+        # test with tseries
+        delay, num = 0.1, 5
+        msg_list = []
+        def msg_rv(msg):
+            msg_list.append(msg)
+        self.xrun.msg_hook = msg_rv
+        self.xrun({}, ScanPlan(self.bt, tseries, exp, delay, num))
+        open_run = [el.kwargs for el in msg_list\
+                    if el.command == 'open_run'].pop()
+        self.assertEqual(open_run['sp_type'], 'tseries')
+        self.assertEqual(open_run['sp_requested_exposure'], exp)
+        self.assertEqual(open_run['sp_requested_delay'], delay)
+        self.assertEqual(open_run['sp_requested_num'], num)
+        # test with Tlist
+        T_list = [300, 256, 128]
+        msg_list = []
+        def msg_rv(msg):
+            msg_list.append(msg)
+        self.xrun.msg_hook = msg_rv
+        self.xrun({}, ScanPlan(self.bt, Tlist, exp, T_list))
+        open_run = [el.kwargs for el in msg_list
+                    if el.command == 'open_run'].pop()
+        self.assertEqual(open_run['sp_type'], 'Tlist')
+        self.assertEqual(open_run['sp_requested_exposure'], exp)
+        self.assertEqual(open_run['sp_T_list'], T_list)
 
     # deprecate from v0.5 release
     #def test_open_collection(self):

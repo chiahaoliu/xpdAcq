@@ -1,3 +1,18 @@
+#!/usr/bin/env python
+##############################################################################
+#
+# xpdacq            by Billinge Group
+#                   Simon J. L. Billinge sb2896@columbia.edu
+#                   (c) 2016 trustees of Columbia University in the City of
+#                        New York.
+#                   All rights reserved
+#
+# File coded by:    Timothy Liu, Dan Allan
+#
+# See AUTHORS.txt for a list of people who contributed.
+# See LICENSE.txt for license information.
+#
+##############################################################################
 import os
 import uuid
 import yaml
@@ -55,15 +70,14 @@ def _summarize(plan):
 
 def _configure_pe1c(exposure):
     """
-    priviate function to configure pe1c with continuous acquistion mode
+    private function to configure pe1c with continuous acquisition mode
     """
     # cs studio configuration doesn't propagate to python level
     glbl.area_det.cam.acquire_time.put(glbl.frame_acq_time)
-    acq_time = glbl.area_det.cam.acquire_time.get()
     # compute number of frames
+    acq_time = glbl.area_det.cam.acquire_time.get()
+    _check_mini_expo(exposure, acq_time)
     num_frame = np.ceil(exposure / acq_time)
-    if num_frame == 0:
-        num_frame = 1
     computed_exposure = num_frame * acq_time
     glbl.area_det.images_per_set.put(num_frame)
     # print exposure time
@@ -71,6 +85,30 @@ def _configure_pe1c(exposure):
           "= {}".format(exposure, computed_exposure))
     return num_frame, acq_time, computed_exposure
 
+
+def _check_mini_expo(exposure, acq_time):
+    if exposure < acq_time:
+        raise ValueError("WARNING: total exposure time: {}s is shorter "
+                         "than frame acquisition time {}s\n"
+                         "you have two choices:\n"
+                         "1) increase your exposure time to be at least"
+                         "larger than frame acquisition time\n"
+                         "2) increase the frame rate, if possible\n"
+                         "    - to increase exposure time, simply resubmit"
+                         "    the ScanPlan with a longer exposure time\n"
+                         "    - to increase frame-rate/decrease the"
+                         "    frame acquisition time, please use the"
+                         "    following command:\n"
+                         "    >>> {} \n then rerun your ScanPlan definition"
+                         "    or rerun the xrun"
+                         "Note: by default, xpdAcq recommends running"
+                         "the detector at  its fastest frame-rate\n"
+                         "(currently with a frame-acquisition time of"
+                         "0.1s)\n in which case you cannot set it to a"
+                         "lower value"
+                         .format(exposure, acq_time,
+                                 ">>> glbl.frame_acq_time = 0.5  #set"
+                                 " to 0.5s"))
 
 def ct(dets, exposure, *, md=None):
     """
@@ -168,6 +206,53 @@ def Tramp(dets, exposure, Tstart, Tstop, Tstep, *, md=None):
     yield from plan
 
 
+def Tlist(dets, exposure, T_list):
+    """defines a flexible scan with user-specified temperatures
+
+    A frame is exposed for the given exposure time at each of the
+    user-specified temperatures
+
+    Parameters
+    ----------
+    dets : list
+        list of objects that represent instrument devices. In xpdAcq, it is
+        defaulted to area detector.
+    exposure : float
+        total time of exposure in seconds for area detector
+    T_list : list
+        a list of temperature where a scan will be run
+
+    Note
+    ----
+    area detector and temperature controller will always be the one
+    configured in global state. To find out which these are, please
+    using following commands:
+
+        >>> glbl.area_det
+        >>> glbl.temp_controller
+
+    To interrogate which devices are currently in use.
+    """
+
+    pe1c, = dets
+    # setting up area_detector and temp_controller
+    (num_frame, acq_time, computed_exposure) = _configure_pe1c(exposure)
+    T_controller = glbl.temp_controller
+    xpdacq_md = {'sp_time_per_frame': acq_time,
+                 'sp_num_frames': num_frame,
+                 'sp_requested_exposure': exposure,
+                 'sp_computed_exposure': computed_exposure,
+                 'sp_T_list': T_list,
+                 'sp_type': 'Tlist',
+                 'sp_uid': str(uuid.uuid4()),
+                 'sp_plan_name': 'Tlist'
+                }
+    # pass xpdacq_md to as additional md to bluesky plan
+    plan = bp.list_scan([glbl.area_det], T_controller, T_list, md=xpdacq_md)
+    plan = bp.subs_wrapper(plan, LiveTable([glbl.area_det, T_controller]))
+    yield from plan
+
+
 def tseries(dets, exposure, delay, num, *, md=None):
     """
     time series scan with area detector.
@@ -207,6 +292,8 @@ def tseries(dets, exposure, delay, num, *, md=None):
                         'sp_num_frames': num_frame,
                         'sp_requested_exposure': exposure,
                         'sp_computed_exposure': computed_exposure,
+                        'sp_requested_delay': delay,
+                        'sp_requested_num': num,
                         'sp_type': 'tseries',
                         # need a name that shows all parameters values
                         # 'sp_name': 'tseries_<exposure_time>',
@@ -234,6 +321,7 @@ def _nstep(start, stop, step_size):
 register_plan('ct', ct)
 register_plan('Tramp', Tramp)
 register_plan('tseries', tseries)
+register_plan('Tlist', Tlist)
 
 
 def new_short_uid():
@@ -311,7 +399,7 @@ class Beamtime(ValidatedDictLike, YamlDict):
 
     def register_scanplan(self, scanplan):
         # Notify this Beamtime about an ScanPlan that should be re-synced
-        # whenever the contents of the Beamtime are edited. 
+        # whenever the contents of the Beamtime are edited.
         sp_name_list = [el.short_summary() for el in self.scanplans]
         # manage bt.list
         if scanplan.short_summary() not in sp_name_list:
@@ -450,11 +538,6 @@ class Sample(ValidatedDictLike, YamlChainMap):
         self.setdefault('sa_uid', new_short_uid())
         beamtime.register_sample(self)
 
-    @property
-    def md(self):
-        """ metadata for current object """
-        return dict(self)
-
     def validate(self):
         missing = set(self._REQUIRED_FIELDS) - set(self)
         if missing:
@@ -520,6 +603,12 @@ class ScanPlan(ValidatedDictLike, YamlChainMap):
         if 'sp_uid' in sp_dict['sp_kwargs']:
             scanplan_uid = sp_dict['sp_kwargs'].pop('sp_uid')
             sp_dict.update({'sp_uid': scanplan_uid})
+        # test if that is a valid plan
+        exposure = kwargs.get('exposure') # input as kwargs
+        if exposure is None:
+            # input as args
+            exposure, *rest = args  # predefined scan signature
+        _check_mini_expo(exposure, glbl.frame_acq_time)
         super().__init__(sp_dict, beamtime)  # ChainMap signature
         self.setdefault('sp_uid', new_short_uid())
         beamtime.register_scanplan(self)
