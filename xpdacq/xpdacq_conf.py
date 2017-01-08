@@ -141,6 +141,7 @@ glbl_dict = dict(is_simulation=simulation,
                  shutter_control=True,
                  auto_load_calib=True,
                  calib_config_name=CALIB_CONFIG_NAME,
+                 calib_config_dict=None,
                  mask_dict={'edge': 30, 'lower_thresh': 0.0,
                             'upper_thresh': None, 'bs_width': 13,
                             'tri_offset': 13, 'v_asym': 0,
@@ -211,7 +212,8 @@ class GlblYamlDict(YamlDict):
     _MUTABLE_FIELDS = ['frame_acq_time', 'auto_dark', 'dk_window',
                        '_dark_dict_list', 'shutter_control',
                        'auto_load_calib', 'calib_config_name',
-                       'mask_dict', 'det_image_field']
+                       'calib_config_dict', 'mask_dict',
+                       'det_image_field']
 
     def __init__(self, name, **kwargs):
         super().__init__(name=name,**kwargs)

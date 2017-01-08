@@ -5,7 +5,7 @@ import unittest
 from mock import MagicMock
 
 from xpdacq.glbl import glbl
-from xpdacq.xpdacq_conf import setup_xpdacq
+from xpdacq.xpdacq_conf import configure_device
 from xpdacq.beamtimeSetup import (_start_beamtime, _end_beamtime,
                                   load_beamtime)
 from xpdacq.beamtime import (_summarize, ScanPlan, ct, Tramp, tseries,
@@ -30,8 +30,8 @@ class BeamtimeObjTest(unittest.TestCase):
         # make xpdUser dir. That is required for simulation
         os.makedirs(self.home_dir, exist_ok=True)
         # set simulation objects
-        setup_xpdacq(db=db, shutter=shctl1,
-                     area_det=pe1c,temp_controller=cs700)
+        configure_device(db=db, shutter=shctl1,
+                         area_det=pe1c,temp_controller=cs700)
         self.bt = _start_beamtime(self.PI_name, self.saf_num,
                                   self.experimenters,
                                   wavelength=self.wavelength)
