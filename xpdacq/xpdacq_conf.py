@@ -20,6 +20,20 @@ import yaml
 from time import strftime, sleep
 from xpdacq.yamldict import YamlDict
 
+# special function and dict to store all necessary objects
+xpd_device = {}
+def configure_device(*, area_det, shutter,
+                     temp_controller, db, **kwargs):
+    """ function to set up required device/objects for xpdacq """
+    # specifically assign minimum requirements
+    xpd_device['area_det'] = area_det
+    xpd_device['shutter'] = shutter
+    xpd_device['temp_controller'] = temp_controller
+    xpd_device['db'] = db
+    # extra kwargs
+    xpd_device.update(**kwargs)
+
+
 # better to get this from a config file in the fullness of time
 HOME_DIR_NAME = 'xpdUser'
 BLCONFIG_DIR_NAME = 'xpdConfig'
@@ -134,19 +148,6 @@ glbl_dict = dict(is_simulation=simulation,
                  # instrument config
                  det_image_field=IMAGE_FIELD
                  )
-
-
-# special function and dict to store all necessary objects
-xpd_device = {}
-def setup_xpdacq(*, area_det, shutter, temp_controller, db, **kwargs):
-    """ function to set up required device/objects for xpdacq """
-    # specifically assign minimum requirements
-    xpd_device['area_det'] = area_det
-    xpd_device['shutter'] = shutter
-    xpd_device['temp_controller'] = temp_controller
-    xpd_device['db'] = db
-    # extra kwargs
-    xpd_device.update(**kwargs)
 
 
 def configure_frame_acq_time(new_frame_acq_time):
