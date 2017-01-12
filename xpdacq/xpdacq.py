@@ -18,6 +18,7 @@ import uuid
 import time
 import yaml
 import numpy as np
+from collections import ChainMap, OrderedDict
 
 import bluesky.plans as bp
 from bluesky import RunEngine
@@ -297,20 +298,6 @@ class CustomizedRunEngine(RunEngine):
         self._beamtime = bt_obj
         self.md.update(bt_obj.md)
         print("INFO: beamtime object has been linked\n")
-        if not glbl['is_simulation']:
-            pass
-            # let user deal with suspender
-            #beamdump_sus = SuspendFloor(glbl.ring_current, 50,
-            #                            resume_thresh=glbl.ring_current.get() * 0.9,
-            #                            sleep=1200)
-            #glbl.suspender = beamdump_sus
-            # FIXME : print info for user
-            # self.install_suspender(beamdump_sus)
-            # print("INFO: beam dump suspender has been created."
-            #        " to check, please do\n:"
-            #        ">>> xrun.suspenders")
-        else:
-            pass
 
     def __call__(self, sample, plan, subs=None, *,
                  verify_write=False, dark_strategy=periodic_dark,
@@ -327,6 +314,20 @@ class CustomizedRunEngine(RunEngine):
                       ", please do `bt.list()` to check if it exists yet"
                       .format(sample))
                 return
+        if isinstance(sample, list):
+            sample_chain = OrderedDict()
+            for ind in sample:
+                try:
+                    sample_obj = list(self.beamtime.samples.values())[ind]
+                    sample_name = list(self.beamtime.samples.keys())[ind]
+                    sample_chain.update({sample_name: sample_obj})
+                except IndexError:
+                    print("WARNING: hmm, there is no sample with index `{}`"
+                          ", please do `bt.list()` to check if it exists yet"
+                          .format(ind))
+                    return
+                else:
+                    sample = sample_chain
         # If a plan is given as a string, look in up in the global registry.
         if isinstance(plan, int):
             try:
