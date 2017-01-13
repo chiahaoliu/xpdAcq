@@ -17,6 +17,7 @@ import os
 import uuid
 import yaml
 import inspect
+from cycler import cycler
 from collections import ChainMap, OrderedDict
 
 import numpy as np
@@ -359,6 +360,7 @@ def statTramp(dets, exposure, Tstart, Tstop, Tstep, stat_list, *, md=None):
     (num_frame, acq_time, computed_exposure) = _configure_area_det(exposure)
     area_det = xpd_configuration['area_det']
     temp_controller = xpd_configuration['temp_controller']
+    stat_motor = xpd_configuration['stat_motor']  # if it exists
     # compute Nsteps
     (Nsteps, computed_step_size) = _nstep(Tstart, Tstop, Tstep)
     # update md
@@ -375,15 +377,12 @@ def statTramp(dets, exposure, Tstart, Tstop, Tstep, stat_list, *, md=None):
                         'sp_stat_list' : stat_list,
                         'sp_uid': str(uuid.uuid4()),
                         'sp_plan_name': 'statTramp'})
-    def stat_motion(dets, motor, stat_list):
-        #FIXME
-        yield from bp.list_scan([dets], motor, stat_list)
-
-    plan = bp.scan([area_det], temp_controller, Tstart, Tstop,
-                   Nsteps, md=_md)
-    plan = bp.subs_wrapper(plan,
-                           LiveTable([area_det, motor,
-                                      temp_controller]))
+    temp_traj = cycler(temp_controller,
+                       np.linspace(Tstart, Tstop, Nsteps))
+    stat_traj = cycler(stat_motor, stat_list)
+    plan = bp.scan_nd([area_det], temp_traj*stat_traj, md=_md)
+    plan = bp.subs_wrapper(plan, LiveTable([area_det, stat_motor,
+                                            temp_controller]))
     yield from plan
 
 register_plan('ct', ct)
