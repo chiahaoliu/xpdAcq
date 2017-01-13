@@ -19,9 +19,9 @@ import yaml
 import inspect
 from collections import ChainMap, OrderedDict
 
-import bluesky.plans as bp
 import numpy as np
 import bluesky.plans as bp
+from bluesky.examples import Mover
 from bluesky.callbacks import LiveTable
 
 from .glbl import glbl
@@ -33,6 +33,7 @@ from .validated_dict import ValidatedDictLike
 # plan functions in Python.
 _PLAN_REGISTRY = {}
 
+motor = Mover('diff_x', {'diff_x': lambda x: x}, {'x':0})
 
 def register_plan(plan_name, plan_func, overwrite=False):
     """
@@ -324,11 +325,72 @@ def _nstep(start, stop, step_size):
     return computed_nsteps, computed_step_size
 
 
+def statTramp(dets, exposure, Tstart, Tstop, Tstep, stat_list, *, md=None):
+    """Scan over temeprature controller in steps and move motor in each
+     of temeprature points.
+
+    Parameters
+    ----------
+    detectors : list
+        list of 'readable' objects
+    exposure : float
+        exposure time at each temeprature step in seconds
+    Tstart : float
+        starting point of temperature sequence
+    Tstop : float
+        stoping point of temperature sequence
+    Tstep : float
+        step size between Tstart and Tstop of this sequence
+    step_list : list
+        a list of motor positions that will be driven at each of
+        temperature point
+    md : dict, optional
+        extra metadata
+
+    Note
+    ----
+    temperature controller that is driven will always be the one configured in
+    global state. Please refer to http://xpdacq.github.io for more information
+    """
+    pe1c, = dets
+    if md is None:
+        md = {}
+    # setting up area_detector
+    (num_frame, acq_time, computed_exposure) = _configure_area_det(exposure)
+    area_det = xpd_configuration['area_det']
+    temp_controller = xpd_configuration['temp_controller']
+    # compute Nsteps
+    (Nsteps, computed_step_size) = _nstep(Tstart, Tstop, Tstep)
+    # update md
+    _md = ChainMap(md, {'sp_time_per_frame': acq_time,
+                        'sp_num_frames': num_frame,
+                        'sp_requested_exposure': exposure,
+                        'sp_computed_exposure': computed_exposure,
+                        'sp_type': 'Tramp',
+                        'sp_startingT': Tstart,
+                        'sp_endingT': Tstop,
+                        'sp_requested_Tstep': Tstep,
+                        'sp_computed_Tstep': computed_step_size,
+                        'sp_Nsteps': Nsteps,
+                        'sp_stat_list' : stat_list,
+                        'sp_uid': str(uuid.uuid4()),
+                        'sp_plan_name': 'statTramp'})
+    def stat_motion(dets, motor, stat_list):
+        #FIXME
+        yield from bp.list_scan([dets], motor, stat_list)
+
+    plan = bp.scan([area_det], temp_controller, Tstart, Tstop,
+                   Nsteps, md=_md)
+    plan = bp.subs_wrapper(plan,
+                           LiveTable([area_det, motor,
+                                      temp_controller]))
+    yield from plan
+
 register_plan('ct', ct)
 register_plan('Tramp', Tramp)
 register_plan('tseries', tseries)
 register_plan('Tlist', Tlist)
-
+register_plan('statTramp', statTramp)
 
 def new_short_uid():
     return str(uuid.uuid4())[:8]
