@@ -23,6 +23,7 @@ from IPython import get_ipython
 from .beamtime import *
 from .tools import _graceful_exit
 from .xpdacq_conf import glbl_dict
+from .analysis_server import p
 
 # list of exposure times for pre-poluated ScanPlan inside
 # _start_beamtime
@@ -214,6 +215,7 @@ def _end_beamtime(base_dir=None, archive_dir=None, bto=None, usr_confirm='y'):
     _delete_home_dir_tree()
     # delete bt
     del ips.ns_table['user_global']['bt']
+    p.join()
 
 
 def _clean_info(obj):

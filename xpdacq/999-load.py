@@ -17,6 +17,10 @@ import os
 from xpdacq.xpdacq_conf import (glbl_dict, configure_device,
                                 _reload_glbl, _set_glbl)
 
+from xpdacq.analysis_server import Q, p
+# start analysis pipeline
+p.start()
+
 # configure experiment device being used in current version
 if glbl_dict['is_simulation']:
     from xpdacq.simulation import pe1c, db, cs700, shctl1
@@ -57,6 +61,7 @@ xrun.md['group'] = glbl['group']
 
 # insert header to db, either simulated or real
 xrun.subscribe('all', db.mds.insert)
+xrun.subscribe(Q.put_nowait)
 
 if bt:
     xrun.beamtime = bt
