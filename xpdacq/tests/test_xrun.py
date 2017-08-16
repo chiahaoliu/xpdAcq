@@ -15,8 +15,6 @@ from xpdacq.beamtimeSetup import (_start_beamtime, _end_beamtime)
 from xpdacq.xpdacq import (_validate_dark, CustomizedRunEngine,
                            _auto_load_calibration_file,
                            set_beamdump_suspender)
-from xpdacq.simulation import pe1c, cs700, shctl1, SimulatedPE1C
-
 import ophyd
 from bluesky import Msg
 import bluesky.examples as be
