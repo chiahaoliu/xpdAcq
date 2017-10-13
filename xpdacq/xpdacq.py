@@ -462,8 +462,8 @@ class CustomizedRunEngine(RunEngine):
               'event', 'descriptor'}
 
         verify_write: bool, optional
-            Double check if the data have been written into database.
-            In general data is written in a lossless fashion at NSLS-II
+            Double check if the data have been written into the database.
+            In general data is written in a lossless fashion at the NSLS-II
             Therefore, False by default.
         dark_strategy: callable, optional.
             Protocol of taking dark frame during experiment. Default

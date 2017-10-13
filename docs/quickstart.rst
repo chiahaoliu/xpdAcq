@@ -55,9 +55,7 @@ Carry out the steps in this order to ensure a successful experiment.
 
   5. Run your experiment by running ``xrun(<sample>, <scanplan>)`` and your data will be saved automatically.
 
-
-These and many more things are explained below and elsewhere in the documentation.`XPD-Users Google group
-<https://groups.google.com/forum/#!forum/xpd-users;context-place=overview>`_
+These and many more things are explained below and elsewhere in the documentation.
 
 Overview
 --------
