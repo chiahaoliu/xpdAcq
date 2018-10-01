@@ -168,11 +168,12 @@ def ct(dets, exposure):
     to see which device is being linked
     """
 
-    pe1c, = dets
     md = {}
+    area_det = xpd_configuration['area_det']
+    if area_det not in dets:
+        dets = dets + [area_det]
     # setting up area_detector
     (num_frame, acq_time, computed_exposure) = _configure_area_det(exposure)
-    area_det = xpd_configuration['area_det']
     # update md
     _md = ChainMap(md, {'sp_time_per_frame': acq_time,
                         'sp_num_frames': num_frame,
@@ -181,8 +182,8 @@ def ct(dets, exposure):
                         'sp_type': 'ct',
                         'sp_uid': str(uuid.uuid4()),
                         'sp_plan_name': 'ct'})
-    plan = bp.count([area_det], md=_md)
-    plan = bpp.subs_wrapper(plan, LiveTable([]))
+    plan = bp.count(dets, md=_md)
+    plan = bpp.subs_wrapper(plan, LiveTable(dets))
     yield from plan
 
 
@@ -241,12 +242,15 @@ def Tramp(dets, exposure, Tstart, Tstop, Tstep, *,
     open during the ramping.
     """
 
-    pe1c, = dets
+    area_det = xpd_configuration['area_det']
+    T_controller = xpd_configuration['temp_controller']
+    if area_det not in dets:
+        dets = dets + [area_det]
+    if T_controller not in dets:
+        dets = dets + [T_controller]
     md = {}
     # setting up area_detector
     (num_frame, acq_time, computed_exposure) = _configure_area_det(exposure)
-    area_det = xpd_configuration['area_det']
-    temp_controller = xpd_configuration['temp_controller']
     # compute Nsteps
     (Nsteps, computed_step_size) = _nstep(Tstart, Tstop, Tstep)
     # update md
@@ -262,9 +266,9 @@ def Tramp(dets, exposure, Tstart, Tstop, Tstep, *,
                         'sp_Nsteps': Nsteps,
                         'sp_uid': str(uuid.uuid4()),
                         'sp_plan_name': 'Tramp'})
-    plan = bp.scan([area_det], temp_controller, Tstart, Tstop,
+    plan = bp.scan(dets, T_controller, Tstart, Tstop,
                    Nsteps, per_step=per_step, md=_md)
-    plan = bpp.subs_wrapper(plan, LiveTable([temp_controller]))
+    plan = bpp.subs_wrapper(plan, LiveTable(dets))
     yield from plan
 
 
@@ -318,11 +322,14 @@ def Tlist(dets, exposure, T_list, *, per_step=_shutter_step):
     open during the ramping.
     """
 
-    pe1c, = dets
-    # setting up area_detector and temp_controller
-    (num_frame, acq_time, computed_exposure) = _configure_area_det(exposure)
     area_det = xpd_configuration['area_det']
     T_controller = xpd_configuration['temp_controller']
+    if area_det not in dets:
+        dets = dets + [area_det]
+    if T_controller not in dets:
+        dets = dets + [T_controller]
+    # setting up area_detector and temp_controller
+    (num_frame, acq_time, computed_exposure) = _configure_area_det(exposure)
     xpdacq_md = {'sp_time_per_frame': acq_time,
                  'sp_num_frames': num_frame,
                  'sp_requested_exposure': exposure,
@@ -333,9 +340,9 @@ def Tlist(dets, exposure, T_list, *, per_step=_shutter_step):
                  'sp_plan_name': 'Tlist'
                  }
     # pass xpdacq_md to as additional md to bluesky plan
-    plan = bp.list_scan([area_det], T_controller, T_list,
+    plan = bp.list_scan(dets, T_controller, T_list,
                         per_step=per_step, md=xpdacq_md)
-    plan = bpp.subs_wrapper(plan, LiveTable([T_controller]))
+    plan = bpp.subs_wrapper(plan, LiveTable(dets))
     yield from plan
 
 
@@ -378,10 +385,12 @@ def tseries(dets, exposure, delay, num, auto_shutter=True):
         >>> ScanPlan(bt, tseries, 10, 5, 10, False)
     """
 
-    pe1c, = dets
+
     md = {}
     # setting up area_detector
     area_det = xpd_configuration['area_det']
+    if area_det not in dets:
+        dets = dets + [area_det]
     (num_frame, acq_time, computed_exposure) = _configure_area_det(exposure)
     real_delay = max(0, delay - computed_exposure)
     period = max(computed_exposure, real_delay + computed_exposure)
@@ -401,8 +410,8 @@ def tseries(dets, exposure, delay, num, auto_shutter=True):
                         # 'sp_name': 'tseries_<exposure_time>',
                         'sp_uid': str(uuid.uuid4()),
                         'sp_plan_name': 'tseries'})
-    plan = bp.count([area_det], num, delay, md=_md)
-    plan = bpp.subs_wrapper(plan, LiveTable([]))
+    plan = bp.count(dets, num, delay, md=_md)
+    plan = bpp.subs_wrapper(plan, LiveTable(dets))
     def inner_shutter_control(msg):
         if msg.command == 'trigger':
             def inner():
@@ -862,12 +871,12 @@ class ScanPlan(ValidatedDictLike, YamlChainMap):
     def bound_arguments(self):
         """ bound arguments of this ScanPlan object """
         signature = inspect.signature(self.plan_func)
-        # empty list is for [pe1c]
+        # empty list -> placeholder for detector list
         bound_arguments = signature.bind([], *self['sp_args'],
                                          **self['sp_kwargs'])
         # bound_arguments.apply_defaults() # only valid in py 3.5
         complete_kwargs = bound_arguments.arguments
-        # remove place holder for [pe1c]
+        # remove place holder for []
         complete_kwargs.popitem(False)
         # replace callable objects, with its func name
         for k, v in complete_kwargs.items():
@@ -875,14 +884,13 @@ class ScanPlan(ValidatedDictLike, YamlChainMap):
                 complete_kwargs[k] = v.__name__
         return complete_kwargs
 
-    def factory(self):
-        # grab the area detector used in current configuration
-        pe1c = xpd_configuration['area_det']
-        extra_kw = {}
+    def factory(self, dets):
+        assert isinstance(dets, list)
         # pass parameter to plan_func -> needed for statTramp-like plan
+        extra_kw = {}
         if 'bt' in inspect.signature(self.plan_func).parameters:
             extra_kw['bt'] = self._bt
-        plan = self.plan_func([pe1c], *self['sp_args'],
+        plan = self.plan_func(dets, *self['sp_args'],
                               **self['sp_kwargs'], **extra_kw)
         return plan
 

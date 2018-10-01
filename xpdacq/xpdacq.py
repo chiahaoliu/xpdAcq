@@ -483,11 +483,13 @@ class CustomizedRunEngine(RunEngine):
                 return
         return sample
 
-    def translate_to_plan(self, plan, sample):
+    def translate_to_plan(self, dets, plan, sample):
         """Translate a plan input into a generator
 
         Parameters
         ----------
+        dets, list of `readable` object
+            List of readable, ophyd objects of instrument.
         sample : list of int or dict-like
             Sample metadata. If a beamtime object is linked,
             an integer will be interpreted as the index appears in the
@@ -508,7 +510,7 @@ class CustomizedRunEngine(RunEngine):
 
         """
         if isinstance(plan, list):
-            plan = [self.translate_to_plan(p, s) for p, s in zip(plan, sample)]
+            plan = [self.translate_to_plan(dets, p, s) for p, s in zip(plan, sample)]
         # If a plan is given as a int, look in up in the global registry.
         else:
             if isinstance(plan, int):
@@ -521,7 +523,7 @@ class CustomizedRunEngine(RunEngine):
                     return
             # If the plan is an xpdAcq 'ScanPlan', make the actual plan.
             if isinstance(plan, ScanPlan):
-                plan = plan.factory()
+                plan = plan.factory(dets)
             mm = _sample_injector_factory(sample)
             plan = bpp.msg_mutator(plan, mm)
         return plan
@@ -565,7 +567,7 @@ class CustomizedRunEngine(RunEngine):
 
     def __call__(self, sample, plan, subs=None, *,
                  verify_write=False, dark_strategy=periodic_dark,
-                 robot=False,
+                 robot=False, user_specified_dets=[],
                  **metadata_kw):
         """
         Execute a plan
@@ -609,6 +611,11 @@ class CustomizedRunEngine(RunEngine):
             found at ``http://xpdacq.github.io/xpdAcq/usb_Running.html#automated-dark-collection``
         robot: bool, optional
             If true run the scan as a robot scan, defaults to False
+        user_specified_dets: list, optional
+            A list of extra detectors specified by user. Detectors in
+            this list will be triggered and data will be saved to the
+            database. Default to [] means only default detector(s) in
+            xpdAcq ScanPlan will be triggered.
         metadata_kw:
             Extra keyword arguments for specifying metadata in the
             run time. If the extra metdata has the same key as the
@@ -651,7 +658,7 @@ class CustomizedRunEngine(RunEngine):
             if ip.lower() == 'n':
                 return
         # Turn ints into generators
-        plan = self.translate_to_plan(plan, sample)
+        plan = self.translate_to_plan(user_specified_dets, plan, sample)
 
         # Collect the plans by contiguous samples and chain them
         sample, plan = zip(*[(k, pchain(*[o[1] for o in v])) for k, v in
